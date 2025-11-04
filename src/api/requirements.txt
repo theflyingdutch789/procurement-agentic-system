@@ -1,0 +1,23 @@
+# FastAPI framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# MongoDB
+pymongo==4.6.1
+
+# Pydantic for data validation
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Python standard library utilities
+python-multipart==0.0.6
+python-dateutil==2.8.2
+
+# LangChain for AI Agent (optional - keeping for backwards compatibility)
+langgraph==0.0.50
+
+# OpenAI API (GPT-5 Responses API requires latest version)
+openai>=1.70.0
+
+# Additional dependencies for agents
+tiktoken==0.5.2

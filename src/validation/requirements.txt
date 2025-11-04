@@ -1,0 +1,5 @@
+# MongoDB
+pymongo==4.6.1
+
+# Date utilities
+python-dateutil==2.8.2

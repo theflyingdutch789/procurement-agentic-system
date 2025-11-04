@@ -1,0 +1,12 @@
+# Core dependencies
+pandas==2.1.4
+pymongo==4.6.1
+
+# Progress tracking
+tqdm==4.66.1
+
+# Data validation
+python-dateutil==2.8.2
+
+# Performance
+numpy==1.26.3
