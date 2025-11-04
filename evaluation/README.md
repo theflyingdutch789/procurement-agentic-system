@@ -225,7 +225,7 @@ Test with specific model configurations:
 
 ```bash
 python eval_system.py \
-  --profiles "gpt-5:high:10" " \
+  --profiles "gpt-5:high:10" "gpt-5-mini:medium:5" \
   --output-dir ./reports/evaluations \
   --pass-threshold 0.8
 ```
@@ -476,9 +476,9 @@ Compare multiple models or configurations:
 ```bash
 python eval_system.py \
   --profiles \
-    "gpt-5-turbo=gpt-5:high:20" \
-    "gpt-5-fast=gpt-5:low:10" \
-    "
+    "high-quality=gpt-5:high:20" \
+    "fast=gpt-5-mini:low:10" \
+    "balanced=gpt-5:medium:10"
 ```
 
 **Profile Format:**
@@ -556,8 +556,8 @@ Failed Tests:
 
 ```json
 {
-  "evaluation_id": "eval_20250104_123456",
-  "timestamp": "2025-01-04T12:34:56Z",
+  "evaluation_id": "eval_20241104_123456",
+  "timestamp": "2024-11-04T12:34:56Z",
   "profiles": [...],
   "test_results": [
     {
@@ -817,9 +817,9 @@ print(result)
 
 ```bash
 # Test API manually
-curl -X POST http://localhost:8000/api/query/natural \
+curl -X POST http://localhost:8000/api/ai/query \
   -H "Content-Type: application/json" \
-  -d '{"query": "test question", "limit": 10}'
+  -d '{"question": "test question", "reasoning_effort": "medium"}'
 
 # Check API logs
 docker-compose logs -f api
@@ -855,5 +855,5 @@ This evaluation framework is part of the Government Procurement Data System and 
 
 ---
 
-**Last Updated**: January 2025
+**Last Updated**: November 2024
 **Version**: 1.0.0
