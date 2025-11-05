@@ -2,7 +2,7 @@
  * Chat functionality
  */
 
-import { API_BASE } from './config.js';
+import { API_BASE, API_TIMEOUT } from './config.js';
 import { DataVisualizer } from './visualizations.js';
 import { handleLogout } from './auth.js';
 
@@ -588,12 +588,17 @@ async function handleSendMessage(event) {
     updateSendButton(true);
 
     try {
+        // Create AbortController with 5-minute timeout for complex queries
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+
         const response = await fetch(`${API_BASE}/chat/query`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             credentials: 'include',
+            signal: controller.signal,
             body: JSON.stringify({
                 conversation_id: currentConversation?._id,
                 question: question,
@@ -602,6 +607,9 @@ async function handleSendMessage(event) {
                 max_results: DEFAULT_MAX_RESULTS
             })
         });
+
+        // Clear timeout if request completes
+        clearTimeout(timeoutId);
 
         const data = await response.json();
 
@@ -636,7 +644,10 @@ async function handleSendMessage(event) {
         console.error('Send message error:', error);
         loadingEl.remove();
 
-        const errorMsg = 'Error: Failed to connect to server';
+        let errorMsg = 'Error: Failed to connect to server';
+        if (error.name === 'AbortError') {
+            errorMsg = 'Error: Query timeout after 5 minutes. Try simplifying your question or using a faster model.';
+        }
         const errorMsgEl = createMessageElement('assistant', errorMsg, new Date());
         messagesContainer.appendChild(errorMsgEl);
     } finally {
