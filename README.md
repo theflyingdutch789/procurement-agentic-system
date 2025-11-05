@@ -202,10 +202,60 @@ This project delivers a **100% production-ready AI-powered procurement assistant
 | **Agent Framework** | LangGraph | Stateful workflow orchestration & retry logic |
 | **Backend** | FastAPI 0.104+ | High-performance async REST API |
 | **Database** | MongoDB 7.0+ | Document store with advanced querying |
+| **DB Driver** | PyMongo 4.6+ | Python MongoDB driver with connection pooling |
 | **Import Pipeline** | Python 3.9+ Pandas | ETL with validation & transformation |
 | **Web UI** | Vanilla JS + HTML5 | Responsive chat interface |
 | **Deployment** | Docker Compose | Containerized multi-service stack |
 | **Storage** | Git LFS | Efficient large file management (156MB CSV) |
+
+### MongoDB Communication Flow
+
+The system communicates with MongoDB through a sophisticated pipeline:
+
+1. **Connection Management**
+   - Uses PyMongo driver with connection pooling
+   - Single `MongoClient` instance shared across requests
+   - Configured in `src/api/dependencies.py`
+   - Connection string: `mongodb://admin:password@mongodb:27017`
+
+2. **Query Generation Flow**
+   ```
+   User Question → GPT-5 → MongoDB Aggregation Pipeline → PyMongo → MongoDB → Results
+   ```
+
+3. **LangGraph Agent MongoDB Integration**
+   - **Pipeline Generator** (`pipeline_generator.py`): GPT-5 converts natural language to MongoDB aggregation pipeline JSON
+   - **Validator** (`validators.py`): Validates pipeline syntax and schema compatibility before execution
+   - **Executor** (`executor.py`): Executes validated pipeline using PyMongo's `collection.aggregate()`
+   - **Error Recovery**: If execution fails, LangGraph retries with corrected pipeline (max 3 attempts)
+
+4. **Direct MongoDB Operations**
+   - **Import**: Batch inserts via PyMongo `insert_many()` with 5,000 document batches
+   - **Indexing**: Executed via MongoDB shell scripts (`init-indexes.js`)
+   - **Queries**: Aggregation pipelines executed through PyMongo
+   - **Statistics**: Uses MongoDB native aggregation framework
+
+5. **Connection Configuration**
+   ```python
+   # FastAPI startup
+   client = MongoClient(
+       host="mongodb",
+       port=27017,
+       username="admin",
+       password="changeme_secure_password",
+       maxPoolSize=50,  # Connection pool
+       serverSelectionTimeoutMS=5000
+   )
+   db = client.government_procurement
+   collection = db.purchase_orders
+   ```
+
+**Key Features:**
+- ✅ Connection pooling for concurrent requests
+- ✅ Automatic reconnection on network failures
+- ✅ Query timeout protection (90 seconds default)
+- ✅ Aggregation pipeline validation before execution
+- ✅ Result streaming for large datasets
 
 ---
 
