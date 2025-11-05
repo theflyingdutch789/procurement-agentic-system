@@ -13,6 +13,7 @@ A comprehensive testing and benchmarking system for evaluating LLM-powered Mongo
 - [Components](#-components)
 - [Evaluation Metrics](#-evaluation-metrics)
 - [Running Evaluations](#-running-evaluations)
+- [Latest Benchmark Results (November 5, 2025)](#latest-benchmark-results-november-5-2025)
 - [Interpreting Results](#-interpreting-results)
 - [Custom Tests](#-custom-tests)
 - [Advanced Usage](#-advanced-usage)
@@ -85,17 +86,19 @@ The framework includes 30+ test cases organized by difficulty and category.
 ### Test Categories
 
 #### 1. Basic Queries (Easy)
+
 Simple operations testing fundamental capabilities.
 
-| Test ID | Description | Query Type |
-|---------|-------------|------------|
-| `basic_001` | Total document count | Count |
-| `basic_002` | Total spending across all years | Aggregation |
-| `basic_003` | List all fiscal years | Distinct |
-| `basic_004` | Top N suppliers by spending | Sort + Limit |
-| `basic_005` | Items above price threshold | Filter |
+| Test ID     | Description                     | Query Type   |
+| ----------- | ------------------------------- | ------------ |
+| `basic_001` | Total document count            | Count        |
+| `basic_002` | Total spending across all years | Aggregation  |
+| `basic_003` | List all fiscal years           | Distinct     |
+| `basic_004` | Top N suppliers by spending     | Sort + Limit |
+| `basic_005` | Items above price threshold     | Filter       |
 
 **Example:**
+
 ```python
 TestCase(
     id="basic_001",
@@ -111,17 +114,19 @@ TestCase(
 ```
 
 #### 2. Intermediate Queries (Medium)
+
 Multi-step operations requiring data grouping and analysis.
 
-| Test ID | Description | Query Type |
-|---------|-------------|------------|
-| `intermediate_001` | Spending by fiscal year | Group + Sort |
-| `intermediate_002` | Top department by spending | Group + Sort + Limit |
-| `intermediate_003` | Average price per acquisition type | Group + Avg |
-| `intermediate_004` | Supplier order frequency | Group + Count |
-| `intermediate_005` | Department spending trends | Multi-stage aggregation |
+| Test ID            | Description                        | Query Type              |
+| ------------------ | ---------------------------------- | ----------------------- |
+| `intermediate_001` | Spending by fiscal year            | Group + Sort            |
+| `intermediate_002` | Top department by spending         | Group + Sort + Limit    |
+| `intermediate_003` | Average price per acquisition type | Group + Avg             |
+| `intermediate_004` | Supplier order frequency           | Group + Count           |
+| `intermediate_005` | Department spending trends         | Multi-stage aggregation |
 
 **Example:**
+
 ```python
 TestCase(
     id="intermediate_002",
@@ -144,17 +149,19 @@ TestCase(
 ```
 
 #### 3. Advanced Queries (Hard)
+
 Complex multi-stage pipelines with sophisticated logic.
 
-| Test ID | Description | Query Type |
-|---------|-------------|------------|
-| `advanced_001` | Top suppliers with conditions | Complex filter + Group |
-| `advanced_002` | Department category breakdown | Nested aggregation |
-| `advanced_003` | Year-over-year growth analysis | Temporal aggregation |
+| Test ID        | Description                    | Query Type              |
+| -------------- | ------------------------------ | ----------------------- |
+| `advanced_001` | Top suppliers with conditions  | Complex filter + Group  |
+| `advanced_002` | Department category breakdown  | Nested aggregation      |
+| `advanced_003` | Year-over-year growth analysis | Temporal aggregation    |
 | `advanced_004` | Supplier concentration metrics | Statistical aggregation |
-| `advanced_005` | Multi-dimensional analysis | Complex pipeline |
+| `advanced_005` | Multi-dimensional analysis     | Complex pipeline        |
 
 **Example:**
+
 ```python
 TestCase(
     id="advanced_003",
@@ -184,15 +191,16 @@ TestCase(
 ```
 
 #### 4. Ultra Queries (Very Hard)
+
 Cutting-edge queries testing advanced reasoning and edge cases.
 
-| Test ID | Description | Query Type |
-|---------|-------------|------------|
-| `ultra_001` | Geospatial supplier analysis | Geo + Aggregation |
-| `ultra_002` | Anomaly detection | Statistical + Conditional |
-| `ultra_003` | Cross-dimensional trends | Complex temporal analysis |
-| `ultra_004` | Supplier network analysis | Graph-like operations |
-| `ultra_005` | Predictive spending patterns | Advanced aggregation |
+| Test ID     | Description                  | Query Type                |
+| ----------- | ---------------------------- | ------------------------- |
+| `ultra_001` | Geospatial supplier analysis | Geo + Aggregation         |
+| `ultra_002` | Anomaly detection            | Statistical + Conditional |
+| `ultra_003` | Cross-dimensional trends     | Complex temporal analysis |
+| `ultra_004` | Supplier network analysis    | Graph-like operations     |
+| `ultra_005` | Predictive spending patterns | Advanced aggregation      |
 
 ---
 
@@ -249,12 +257,14 @@ cd ..
 The orchestrator for the entire evaluation process.
 
 **Key Features:**
+
 - Command-line interface
 - Profile management
 - Environment configuration
 - Exit status based on pass threshold
 
 **Usage:**
+
 ```bash
 python eval_system.py \
   --model gpt-5 \
@@ -272,6 +282,7 @@ python eval_system.py \
 Contains all test case definitions with ground truth queries.
 
 **Structure:**
+
 ```python
 def load_test_cases() -> List[TestCase]:
     return [
@@ -293,6 +304,7 @@ def load_test_cases() -> List[TestCase]:
 Manages test execution, result collection, and reporting.
 
 **Key Methods:**
+
 - `run_evaluation()`: Execute full test suite
 - `run_single_test()`: Run one test case
 - `collect_results()`: Aggregate test outcomes
@@ -303,6 +315,7 @@ Manages test execution, result collection, and reporting.
 Handles communication with the AI agent API.
 
 **Features:**
+
 - Configurable timeouts
 - Retry logic
 - Error handling
@@ -310,6 +323,7 @@ Handles communication with the AI agent API.
 - Request validation
 
 **Example:**
+
 ```python
 from agent_client import AgentClient
 
@@ -331,11 +345,13 @@ Compares agent results against ground truth using multiple strategies.
 **Comparison Modes:**
 
 1. **Structural Comparison**
+
    - Direct result matching
    - Schema validation
    - Type checking
 
 2. **Semantic Comparison**
+
    - LLM-based similarity
    - Heuristic analysis
    - Tolerance for minor differences
@@ -346,6 +362,7 @@ Compares agent results against ground truth using multiple strategies.
    - Fallback mechanisms
 
 **Example:**
+
 ```python
 from comparators import SemanticComparator
 
@@ -366,10 +383,12 @@ is_match, confidence = comparator.compare(
 Creates detailed reports in multiple formats.
 
 **Output Files:**
+
 - `eval_report_TIMESTAMP.json`: Complete test results
 - `eval_summary_TIMESTAMP.txt`: Human-readable summary
 
 **Report Contents:**
+
 - Test pass/fail status
 - Execution times
 - Error messages
@@ -381,6 +400,7 @@ Creates detailed reports in multiple formats.
 Type-safe data structures for the entire system.
 
 **Key Models:**
+
 ```python
 @dataclass
 class EvalProfile:
@@ -413,6 +433,7 @@ class TestResult:
 ### 8. `utils.py` - Helper Functions
 
 Utility functions for common operations:
+
 - JSON serialization
 - Timestamp formatting
 - Path management
@@ -425,6 +446,7 @@ Utility functions for common operations:
 ### Pass/Fail Criteria
 
 A test passes if:
+
 1. **Response Valid**: Agent returns a well-formed response
 2. **Query Correct**: Generated MongoDB query is semantically correct
 3. **Results Match**: Results match ground truth (structurally or semantically)
@@ -432,18 +454,19 @@ A test passes if:
 
 ### Metrics Tracked
 
-| Metric | Description |
-|--------|-------------|
-| **Pass Rate** | Percentage of tests passed |
-| **Avg Execution Time** | Mean time per test |
-| **Confidence Score** | Average semantic similarity |
-| **Category Performance** | Pass rate by difficulty |
-| **Error Rate** | Percentage of tests with errors |
-| **Timeout Rate** | Percentage of tests exceeding timeout |
+| Metric                   | Description                           |
+| ------------------------ | ------------------------------------- |
+| **Pass Rate**            | Percentage of tests passed            |
+| **Avg Execution Time**   | Mean time per test                    |
+| **Confidence Score**     | Average semantic similarity           |
+| **Category Performance** | Pass rate by difficulty               |
+| **Error Rate**           | Percentage of tests with errors       |
+| **Timeout Rate**         | Percentage of tests exceeding timeout |
 
 ### Performance Benchmarks
 
 **Expected Performance:**
+
 - Basic queries: 95%+ pass rate
 - Intermediate queries: 85%+ pass rate
 - Advanced queries: 70%+ pass rate
@@ -482,14 +505,26 @@ python eval_system.py \
 ```
 
 **Profile Format:**
+
 ```
 label=model:reasoning_effort:max_results
 ```
 
 **Examples:**
+
 - `gpt-5:high:10` - GPT-5 with high reasoning, 10 results
 - `fast=gpt-5-mini:low:5` - Labeled "fast", GPT-5-mini, low reasoning, 5 results
 - `gpt-5` - Just model name (uses defaults for other params)
+
+### Latest Benchmark Results (November 5, 2025)
+
+The following profiles were executed via `python -m evaluation.eval_system --profiles gpt5-medium=gpt-5:medium:10 gpt5-low=gpt-5:low:10 gpt4-base=gpt-4:low:10` against the production LangGraph agent:
+
+- **gpt5-medium** — pass rate `21/21 (100%)`, average similarity `0.91`, average latency `34.6s`
+- **gpt5-low** — pass rate `21/21 (100%)`, average similarity `0.92`, average latency `20.7s`
+- **gpt4** — pass rate `15/21 (71.4%)`, average similarity `0.70`, average latency `15.4s` (below the default 0.80 pass threshold; struggled on advanced/ultra cases)
+
+Artifacts live in `reports/evaluations/eval_summary_20251105T050819546461.txt` and the matching JSON report for deeper analysis.
 
 ### Semantic Comparison Modes
 
@@ -588,16 +623,19 @@ Failed Tests:
 **Common Failure Types:**
 
 1. **Timeout Failures**
+
    - Agent took too long to respond
    - Increase `--request-timeout`
    - Check API performance
 
 2. **Query Syntax Errors**
+
    - Invalid MongoDB query generated
    - Indicates model reasoning issues
    - Review agent prompts
 
 3. **Result Mismatches**
+
    - Query correct but results differ
    - Check semantic comparison confidence
    - May indicate ground truth issues
@@ -841,6 +879,7 @@ docker-compose logs -f api
 Contributions to improve the evaluation framework are welcome!
 
 **Areas for Contribution:**
+
 - Additional test cases
 - New comparison strategies
 - Performance optimizations
