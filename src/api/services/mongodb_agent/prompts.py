@@ -48,6 +48,12 @@ Answer: [{{"$match": {{"dates.fiscal_year": "2013-2014"}}}}, {{"$group": {{"_id"
 Question: "Orders over $100,000"
 Answer: [{{"$match": {{"item.total_price": {{"$gt": 100000}}}}}}, {{"$limit": 100}}]
 
+Question: "How many orders were created in Q3 2013 (July to September)?"
+Answer: [{{"$match": {{"$expr": {{"$and": [{{"$gte": ["$dates.creation", {{"$toDate": "2013-07-01"}}]}}, {{"$lt": ["$dates.creation", {{"$toDate": "2013-10-01"}}]}}]}}}}}}, {{"$count": "count"}}, {{"$limit": 100}}]
+
+Question: "Show me orders from fiscal year 2012-2013"
+Answer: [{{"$match": {{"dates.fiscal_year": "2012-2013"}}}}, {{"$limit": 100}}]
+
 FOLLOW-UP QUESTION EXAMPLE:
 Previous: "Which department spent the most?" -> Result: {{"_id": "Health Care Services", "total": 99759350736.42}}
 Current Question: "Show me the top 10 items that department spent money on"
