@@ -1,0 +1,31 @@
+================================================================================
+EVALUATION SUMMARY
+================================================================================
+Generated at: 2025-11-05T05:08:19.546461
+Test cases : 21
+
+[Profile] gpt5-medium
+  Model           : gpt-5 (effort=medium, max_results=10)
+  Pass Rate       : 21/21 (100.0%)
+  Avg Similarity  : 0.91
+  Avg Response(s) : 34.58
+
+[Profile] gpt5-low
+  Model           : gpt-5 (effort=low, max_results=10)
+  Pass Rate       : 21/21 (100.0%)
+  Avg Similarity  : 0.92
+  Avg Response(s) : 20.68
+
+[Profile] gpt4-base
+  Model           : gpt-4 (effort=low, max_results=10)
+  Pass Rate       : 15/21 (71.4%)
+  Avg Similarity  : 0.70
+  Avg Response(s) : 15.43
+  Failed Tests:
+    - advanced_001 (similarity 0.00)
+    - advanced_005 (similarity 0.70)
+    - advanced_006 (similarity 0.00)
+    - expert_002 (similarity 0.00)
+    - ultra_001 (similarity 0.50)
+    - ultra_003 (similarity 0.95)
+
