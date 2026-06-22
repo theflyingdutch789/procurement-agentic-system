@@ -32,9 +32,9 @@ The system uses **2 LangGraph agents**:
             ┌──────────────┐               ┌──────────────────────────────────┐
             │ Deterministic │               │  LANGGRAPH AGENT #2:             │
             │    (fast)     │               │  LangGraphMongoDBAgent           │
-            │   ~15 sec     │               │  (fallback - full LLM)           │
-            └──────────────┘               │  ~60 sec                          │
-                                           └──────────────────────────────────┘
+            │ 1 LLM call:   │               │  (fallback - full LLM)           │
+            │ intent only   │               │  iterative gen + retries         │
+            └──────────────┘               └──────────────────────────────────┘
 ```
 
 ---
@@ -48,13 +48,16 @@ The system uses **2 LangGraph agents**:
 ### State Definition
 
 ```python
-class HybridAgentState(TypedDict):
+class HybridAgentState(TypedDict, total=False):
     question: str                          # User's query
     conversation_history: Optional[List]   # Previous messages for context
+    reasoning_effort: Optional[str]        # GPT-5 reasoning effort (fallback)
+    verbosity: Optional[str]               # Answer verbosity (fallback)
+    previous_response_id: Optional[str]    # Chain-of-thought continuity
+    is_clarification_response: bool        # Skip ambiguity check if true
     intent: Optional[QueryIntent]          # Extracted structured intent
     route: Optional[str]                   # "deterministic" | "fallback" | "stop"
     response: Optional[Dict]               # Final response
-    is_clarification_response: bool        # Skip ambiguity check if true
     error: Optional[str]                   # Error message if any
 ```
 
@@ -141,20 +144,36 @@ Extracts intent and decides which path to take:
 
 ```python
 def _route_node(self, state: HybridAgentState) -> HybridAgentState:
-    # 1. Extract intent using LLM
-    intent = self.intent_extractor.extract(state["question"])
+    # 1. Extract intent using LLM (gpt-5-mini, JSON mode).
+    #    If extraction throws for any reason → fall back to the GPT-5 agent.
+    try:
+        intent = self.deterministic_engine.intent_extractor.extract(
+            state["question"], conversation_context
+        )
+    except Exception as exc:
+        state["error"] = str(exc)
+        state["route"] = "fallback"
+        return state
 
-    # 2. Check if ambiguous → stop and ask for clarification
+    # 2. Ambiguity layer 1 — the LLM itself flagged the question as ambiguous
     if intent.is_ambiguous:
+        state["response"] = self._clarification_response(intent)
         state["route"] = "stop"
         return state
 
-    # 3. Check if action is supported by deterministic engine
+    # 3. Ambiguity layer 2 — deterministic safety-net detector
+    intent = sanitize_intent(state["question"], intent,
+                             is_clarification_response=state.get("is_clarification_response", False))
+    if intent.is_ambiguous:
+        state["response"] = self._clarification_response(intent)
+        state["route"] = "stop"
+        return state
+
+    # 4. Route by action: supported → deterministic, else → fallback
     if intent.action not in SUPPORTED_ACTIONS:
         state["route"] = "fallback"
         return state
 
-    # 4. Use deterministic path
     state["intent"] = intent
     state["route"] = "deterministic"
     return state
@@ -162,7 +181,7 @@ def _route_node(self, state: HybridAgentState) -> HybridAgentState:
 
 #### 2. deterministic (`_deterministic_node`)
 
-Fast path - builds and executes pipeline without LLM:
+Fast path - builds and executes the pipeline with rule-based code (no LLM pipeline generation; intent was already extracted by the route node, and summarization is deterministic for common result shapes):
 
 ```python
 def _deterministic_node(self, state: HybridAgentState) -> HybridAgentState:
@@ -234,16 +253,23 @@ SUPPORTED_ACTIONS = {
 ### State Definition
 
 ```python
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     question: str                          # User's query
     conversation_history: Optional[List]   # Previous messages
     attempt: int                           # Current attempt number
     max_attempts: int                      # Default: 3
+    reasoning_effort: str                  # GPT-5 reasoning effort
+    verbosity: str                         # Answer verbosity
     pipeline: Optional[List]               # Generated MongoDB pipeline
-    results: Optional[List]                # Query results
-    answer: Optional[str]                  # Final answer
+    pipeline_response_id: Optional[str]    # Response ID from generation step
+    latest_response: Optional[Any]         # Raw OpenAI response object
     previous_error: Optional[str]          # Error from last attempt (for retry)
     previous_response_id: Optional[str]    # For conversation continuity
+    results: Optional[List]                # Query results
+    answer: Optional[str]                  # Final answer
+    error: Optional[str]                   # Terminal error if all retries fail
+    reasoning_summary: Optional[str]       # Model's reasoning summary
+    response_id: Optional[str]             # Final response ID (chain-of-thought)
 ```
 
 ### Graph Structure
@@ -354,14 +380,20 @@ def _generate_pipeline_node(self, state: AgentState) -> AgentState:
     attempt = state.get("attempt", 0) + 1
     state["attempt"] = attempt
 
-    pipeline, response_id, error = self.base._generate_pipeline_attempt(
+    pipeline, response_id, latest_response, error = self.base._generate_pipeline_attempt(
         question=state["question"],
-        previous_error=state.get("previous_error"),  # ← Error from last attempt!
+        conversation_history=state.get("conversation_history"),
+        previous_error=state.get("previous_error"),          # ← Error from last attempt!
+        previous_response_id=state.get("previous_response_id"),
+        reasoning_effort=state.get("reasoning_effort", self.base.reasoning_effort),
     )
 
     state["pipeline"] = pipeline
+    state["pipeline_response_id"] = response_id
+    state["latest_response"] = latest_response
+    state["previous_response_id"] = response_id  # Chain context into next call
     state["error"] = error
-    state["previous_error"] = error  # Save for next retry
+    state["previous_error"] = error              # Save for next retry
     return state
 ```
 
@@ -390,7 +422,7 @@ def _generate_pipeline_node(self, state: AgentState) -> AgentState:
 │   ├── Execute → [{ _id: "Health Care", value: 50B }, ...]                   │
 │   └── Summarize → "1. Health Care: $50B ..."                                │
 │                                                                              │
-│   ✅ DONE (fast path, ~15 seconds)                                          │
+│   ✅ DONE (fast path: 1 intent-extraction LLM call, no pipeline generation) │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -433,7 +465,7 @@ def _generate_pipeline_node(self, state: AgentState) -> AgentState:
 │   summarize:                                                                 │
 │   └── LLM creates natural language answer                                    │
 │                                                                              │
-│   ✅ DONE (slow path with 1 retry, ~60 seconds)                             │
+│   ✅ DONE (fallback path with 1 self-correcting retry)                      │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```

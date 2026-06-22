@@ -325,6 +325,10 @@ The engine uses LangGraph for orchestration with conditional routing:
 class HybridAgentState(TypedDict, total=False):
     question: str
     conversation_history: Optional[List[Dict[str, Any]]]
+    reasoning_effort: Optional[str]
+    verbosity: Optional[str]
+    previous_response_id: Optional[str]
+    is_clarification_response: bool
     intent: Optional[QueryIntent]
     route: Optional[str]  # "deterministic" | "fallback" | "stop"
     response: Optional[Dict[str, Any]]
@@ -484,9 +488,9 @@ BUILDER_METHODS = {
     QueryAction.COUNT: _build_count,         # $match → $count
     QueryAction.TOP_N: _build_top_n,         # $match → $group → $sort → $limit
     QueryAction.BOTTOM_N: _build_bottom_n,   # $match → $group → $sort(asc) → $limit
-    QueryAction.AGGREGATE: _build_aggregate, # $match → $group
+    QueryAction.AGGREGATE: _build_aggregate, # $match → $group → $sort → $limit
     QueryAction.SINGLE_VALUE: _build_single, # $match → $group(_id: null)
-    QueryAction.COMPARE: _build_compare,     # Multi-group with $facet
+    QueryAction.COMPARE: _build_compare,     # $match → $group → $sort → $limit (same shape as aggregate)
     QueryAction.TREND: _build_trend,         # $group by time dimension
 }
 ```
