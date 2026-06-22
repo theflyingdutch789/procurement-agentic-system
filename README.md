@@ -40,22 +40,22 @@
 
 ## 🎯 Overview
 
-This project delivers a **100% production-ready AI-powered procurement assistant** built with cutting-edge technologies:
+This project delivers a **production-ready, AI-powered procurement assistant** built around a **hybrid query architecture** — a fast, deterministic engine for the common case, with an LLM agent as an intelligent fallback for the long tail:
 
-- **🧠 GPT-5 Reasoning API**: Leverages OpenAI's latest reasoning model with configurable effort levels (minimal, low, medium, high)
-- **🔄 LangGraph Framework**: Sophisticated agentic workflow with state management, retry logic, and error recovery
-- **💬 Conversational AI**: Natural multi-turn conversations with context preservation
-- **⚡ Real-time Query Generation**: Translates natural language to optimized MongoDB aggregation pipelines
-- **🎨 Modern Web Interface**: Responsive chat UI with real-time streaming responses
-- **📊 Comprehensive Evaluation**: Automated testing framework with 30+ benchmarks
+- **🧭 Hybrid Query Engine**: A LangGraph router classifies each question and sends it down the cheapest path that can answer it correctly — a deterministic pipeline builder for supported intents, or a GPT-5 agent for everything else
+- **⚙️ Deterministic Engine**: Turns an LLM-extracted, structured *intent* into a MongoDB aggregation pipeline with **rule-based code** (no LLM in the query-building or execution loop) — fast, cheap, and reproducible
+- **🤖 GPT-5 Fallback Agent**: A second LangGraph state machine that generates pipelines with OpenAI's reasoning models and **self-corrects** through a validate → retry loop
+- **🛡️ Two-Layer Ambiguity Detection**: An LLM flags ambiguous questions and a deterministic detector double-checks, asking the user for clarification instead of guessing
+- **💬 Conversational Context**: Multi-turn chain-of-thought continuity via the OpenAI Responses API (`previous_response_id`)
+- **📊 Comprehensive Evaluation**: Automated benchmarking framework with 30+ test cases
 
 ### What Sets This Apart
 
-1. **Production-Grade Architecture**: Not a prototype—fully containerized, monitored, and deployment-ready
-2. **Advanced AI Reasoning**: Uses GPT-5's reasoning capabilities with chain-of-thought for complex queries
-3. **Intelligent Agent Design**: LangGraph-powered state machine with validation, retry, and self-correction
-4. **Optimized for Scale**: Handles complex queries sub-second with intelligent caching and indexing
-5. **Battle-Tested**: Comprehensive test suite validates accuracy across 30+ scenarios
+1. **Hybrid, Cost-Aware Routing**: Most queries never hit the expensive pipeline-generation step — they're answered by deterministic code, reserving the GPT-5 agent for genuinely novel questions
+2. **Two Cooperating LangGraph Graphs**: An outer routing graph and an inner self-correcting agent graph — not a single linear prompt chain
+3. **Structured Intent, Not Free-Text Prompting**: Questions are parsed into a typed `QueryIntent` model (actions, metrics, dimensions, filters), which a deterministic builder compiles into validated aggregation pipelines
+4. **Self-Correction**: The fallback agent validates each pipeline with a live MongoDB dry-run and regenerates on failure (up to 3 attempts)
+5. **Production-Grade**: Fully containerized, health-monitored, with pre-execution query validation that blocks unsafe operators (`$where`, `$function`, `$accumulator`)
 
 ---
 
@@ -121,12 +121,12 @@ This project delivers a **100% production-ready AI-powered procurement assistant
 - Comprehensive error handling
 - Health monitoring and metrics
 
-**AI Agent (GPT-5 + LangGraph)**
-- Stateful conversation management
-- Multi-stage workflow orchestration
-- Automatic query validation and correction
-- Result summarization and formatting
-- Graceful degradation on errors
+**Query Engine (Hybrid: Deterministic + GPT-5 + LangGraph)**
+- LangGraph routing graph: deterministic path vs. AI fallback
+- LLM intent extraction into a typed `QueryIntent` model
+- Rule-based aggregation-pipeline builder for 8 query actions
+- Self-correcting GPT-5 fallback with validate → retry loop
+- Mostly LLM-free result summarization (deterministic formatters)
 
 **Frontend (Modern Web)**
 - Real-time chat interface
@@ -148,68 +148,106 @@ This project delivers a **100% production-ready AI-powered procurement assistant
 
 ### System Design
 
-LangGraph is used in two places: a thin hybrid router that decides deterministic vs. fallback,
-and the agentic fallback workflow (retries + summarization).
+A natural-language question enters through the FastAPI `ai_query` router, which holds a single
+`HybridQueryEngine`. That engine is built on **two cooperating LangGraph state machines**: an
+**outer routing graph** that decides *how* to answer, and an **inner agent graph** that handles the
+GPT-5 fallback with self-correction.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         User Interface                           │
-│              (Web Chat / API Clients / CLI Tools)               │
+│         User Interface  (Web Chat / API Clients)                 │
 └───────────────────────────┬─────────────────────────────────────┘
-                            │
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                       FastAPI Backend                            │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │                  AI Query Router                        │    │
-│  │    • Request validation  • Rate limiting               │    │
-│  │    • Auth (future)       • Response formatting         │    │
-│  └────────────────────┬───────────────────────────────────┘    │
-└────────────────────────┼────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    LangGraph Agent Layer                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐    │
-│  │  Planning   │→ │  Generation │→ │  Validation         │    │
-│  │    Node     │  │    Node     │  │     Node            │    │
-│  │             │  │             │  │                     │    │
-│  │ • Analyze   │  │ • GPT-5 API │  │ • Schema check     │    │
-│  │ • Plan      │  │ • Reasoning │  │ • Syntax validate  │    │
-│  └─────────────┘  └─────────────┘  └──────────┬──────────┘    │
-│                                                 │               │
-│  ┌─────────────┐  ┌─────────────┐             │               │
-│  │Summarization│← │  Execution  │←────────────┘               │
-│  │    Node     │  │    Node     │                              │
-│  │             │  │             │                              │
-│  │ • GPT-5     │  │ • MongoDB   │                              │
-│  │ • Format    │  │ • Execute   │                              │
-│  └─────────────┘  └─────────────┘                              │
-│                                                                  │
-│         ┌─────────────────────────────────┐                    │
-│         │      Retry & Error Recovery     │                    │
-│         │   (Max 3 attempts with backoff) │                    │
-│         └─────────────────────────────────┘                    │
-└─────────────────────────────────────────────────────────────────┘
-                            │
+│   FastAPI  ·  POST /api/ai/query  ·  src/api/routes/ai_query.py  │
+│           (validation · conversation state · formatting)         │
+└───────────────────────────┬─────────────────────────────────────┘
                             ▼
+╔═════════════════════════════════════════════════════════════════╗
+║   HybridQueryEngine — OUTER LangGraph router                     ║
+║                                                                   ║
+║      ┌──────────────┐                                            ║
+║      │ decide_route │  LLM intent extraction (gpt-5-mini) →      ║
+║      └──────┬───────┘  typed QueryIntent + 2-layer ambiguity     ║
+║             │                                                     ║
+║      ┌──────┼───────────────────────────────┐                    ║
+║      ▼      ▼                                ▼                    ║
+║   "stop"  "deterministic"               "fallback"               ║
+║  (clarify) │                                │                    ║
+║      │     ▼                                 ▼                    ║
+║      │  ┌────────────────┐         ┌────────────────────────┐    ║
+║      │  │ deterministic  │         │  GPT-5 Fallback Agent   │   ║
+║      │  │     node       │         │  (INNER LangGraph)      │   ║
+║      │  │ build → valid. │         │  generate → run ⟲ retry │   ║
+║      │  │ → exec → summ. │         │  → summarize            │   ║
+║      │  └───────┬────────┘         └───────────┬─────────────┘   ║
+║      │          │ (on any failure → fallback)  │                 ║
+║      └──────────┴──────────────┬───────────────┘                 ║
+╚═════════════════════════════════╪═══════════════════════════════╝
+                                  ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    MongoDB Database                              │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              purchase_orders Collection                   │  │
-│  │                                                            │  │
-│  │  • 346K+ documents  • 18+ indexes  • Geospatial data     │  │
-│  │  • Text search      • Aggregations • UNSPSC taxonomy     │  │
-│  └──────────────────────────────────────────────────────────┘  │
+│   MongoDB · purchase_orders                                      │
+│   ~346K line items · 18+ indexes · geospatial · UNSPSC taxonomy  │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### How LangGraph Is Used
+
+LangGraph powers **two distinct state graphs**, not a single linear chain. Each is a compiled
+`StateGraph` with a typed state (`TypedDict`) and **conditional edges** that branch on the result of
+the previous node.
+
+#### Graph 1 — `HybridQueryEngine` (the router)
+
+*Defined in `src/api/services/deterministic_engine/agent.py`.*
+
+| Node | Responsibility |
+|------|----------------|
+| `decide_route` | Calls the LLM intent extractor (`gpt-5-mini`, JSON mode) to parse the question into a typed `QueryIntent`, runs **two-layer ambiguity detection**, then routes. |
+| `deterministic` | Normalizes the intent, builds an aggregation pipeline with rule-based code, validates it, executes it, and summarizes — all without an LLM in the loop (except optional summary). |
+| `fallback` | Hands the question to the GPT-5 agent graph (Graph 2). |
+
+```
+START ──▶ decide_route ──┬─ route=="stop"           ──▶ END   (ask user to clarify)
+                         ├─ route=="deterministic"  ──▶ deterministic ──┬─ "stop"     ──▶ END
+                         │                                              └─ "fallback" ──▶ fallback ──▶ END
+                         └─ route=="fallback"       ──▶ fallback ───────────────────────────────────▶ END
+```
+
+**Routing rules** (in `decide_route`):
+- **Ambiguous** (LLM flag *or* the deterministic detector) → `stop`, return a clarification prompt instead of guessing.
+- **Supported action** (`LIST`, `COUNT`, `TOP_N`, `BOTTOM_N`, `AGGREGATE`, `SINGLE_VALUE`, `COMPARE`, `TREND`) → `deterministic`.
+- **Unrecognized/unsupported** intent, or any error during extraction → `fallback`.
+
+Crucially, the `deterministic` node is **self-defending**: if intent normalization, validation, pipeline-building, or execution fails at *any* step, it silently re-routes to `fallback` rather than surfacing an error — so the user always gets an answer if either engine can produce one.
+
+#### Graph 2 — `LangGraphMongoDBAgent` (the self-correcting fallback)
+
+*Defined in `src/api/services/ai_pipeline_agent/langgraph_agent.py`.*
+
+| Node | Responsibility |
+|------|----------------|
+| `generate_pipeline` | GPT-5 generates a MongoDB aggregation pipeline (free-form JSON output) via the OpenAI **Responses API**, chaining context with `previous_response_id`. |
+| `run_pipeline` | Validates the pipeline with a **live MongoDB dry-run** (1s timeout), then executes it. On failure it clears the pipeline and records the error. |
+| `summarize` | Turns results into a natural-language answer, reusing the generation step's response ID for chain-of-thought continuity. |
+
+```
+START ──▶ generate_pipeline ──┬─ pipeline ok      ──▶ run_pipeline ──┬─ no error          ──▶ summarize ──▶ END
+                              │                                      ├─ error & retries left ──▶ generate_pipeline   ⟲
+                              │                                      └─ error & out of tries ──▶ END
+                              ├─ no pipeline & retries left ─────────────────────────────────▶ generate_pipeline    ⟲
+                              └─ out of tries ──────────────────────────────────────────────▶ END
+```
+
+The retry loop (default **3 attempts**) feeds the previous error back into the next generation prompt, so the model learns from its own failed pipeline — this is the "self-correction" that makes the fallback robust on novel or malformed queries.
 
 ### Technology Stack
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **AI Model** | GPT-5 (Reasoning API) | Natural language understanding & query generation |
-| **Agent Framework** | LangGraph | Stateful workflow orchestration & retry logic |
+| **AI Model** | GPT-5 series (Responses API) | Intent extraction (`gpt-5-mini`) & pipeline generation |
+| **Agent Framework** | LangGraph | Two state graphs: hybrid router + self-correcting fallback |
+| **Deterministic Engine** | Pure Python | Rule-based intent → aggregation-pipeline compilation |
 | **Backend** | FastAPI 0.104+ | High-performance async REST API |
 | **Database** | MongoDB 7.0+ | Document store with advanced querying |
 | **DB Driver** | PyMongo 4.6+ | Python MongoDB driver with connection pooling |
@@ -230,14 +268,22 @@ The system communicates with MongoDB through a sophisticated pipeline:
 
 2. **Query Generation Flow**
    ```
-   User Question → GPT-5 → MongoDB Aggregation Pipeline → PyMongo → MongoDB → Results
+   Deterministic path:
+     Question → LLM intent extraction → QueryIntent → rule-based builder
+              → validate → PyMongo aggregate → MongoDB → Results
+
+   Fallback path (novel/unsupported queries):
+     Question → GPT-5 pipeline generation → dry-run validate ⟲ retry
+              → PyMongo aggregate → MongoDB → Results
    ```
 
-3. **LangGraph Agent MongoDB Integration**
-   - **Pipeline Generator** (`pipeline_generator.py`): GPT-5 converts natural language to MongoDB aggregation pipeline JSON
-   - **Validator** (`validators.py`): Validates pipeline syntax and schema compatibility before execution
-   - **Executor** (`executor.py`): Executes validated pipeline using PyMongo's `collection.aggregate()`
-   - **Error Recovery**: If execution fails, LangGraph retries with corrected pipeline (max 3 attempts)
+3. **MongoDB Integration (both engines)**
+   - **Intent Extractor** (`deterministic_engine/intent_extractor.py`): `gpt-5-mini` parses the question into a typed `QueryIntent` (JSON mode)
+   - **Query Builder** (`deterministic_engine/query_builder.py`): compiles the intent into an aggregation pipeline with deterministic code (8 action builders)
+   - **Pipeline Generator** (`ai_pipeline_agent/pipeline_generator.py`): GPT-5 generates a pipeline directly for fallback cases
+   - **Validators**: structural checks plus a **live MongoDB dry-run**; unsafe operators (`$where`, `$function`, `$accumulator`) are blocked
+   - **Executors**: run validated pipelines via PyMongo `collection.aggregate()` with a 30s `maxTimeMS`
+   - **Error Recovery**: the fallback agent retries with the previous error fed back into the prompt (max 3 attempts)
 
 4. **Direct MongoDB Operations**
    - **Import**: Batch inserts via PyMongo `insert_many()` with 5,000 document batches
@@ -459,9 +505,11 @@ Once running, access these services:
 
 ### Additional Documentation
 
-- **[Schema Guide](docs/SCHEMA.md)**: Complete data dictionary and field documentation
+- **[Technical Architecture](TECHNICAL_ARCHITECTURE.md)**: Deep dive into the hybrid engine, routing, and component design
+- **[LangGraph Explained](LANGGRAPH_EXPLAINED.md)**: Both state graphs, nodes, edges, and retry logic
+- **[Multi-Tenant Data Strategy](MULTI_TENANT_DATA_STRATEGY.md)**: Scaling the hybrid approach across clients/schemas
+- **[MQL Query Examples](MQL_QUERY_EXAMPLES.md)**: Natural-language questions mapped to MongoDB queries
 - **[Evaluation System](evaluation/README.md)**: AI agent benchmarking framework (30+ test cases)
-- **[LangGraph Agent](src/api/services/mongodb_agent/)**: Agent architecture and workflow
 
 ---
 
@@ -597,7 +645,7 @@ The MongoDB schema is optimized for LLM text-to-query inference:
 }
 ```
 
-See **[docs/SCHEMA.md](docs/SCHEMA.md)** for complete documentation.
+See **[collection_schemas.json](collection_schemas.json)** for the full field inventory, or query the live `GET /api/ai/schema` endpoint.
 
 ---
 
@@ -617,8 +665,9 @@ See **[docs/SCHEMA.md](docs/SCHEMA.md)** for complete documentation.
 
 ### Optimization Strategies
 
+- **Hybrid Routing**: Supported queries skip GPT-5 pipeline generation entirely, answered by deterministic code
 - **GPT-5 Reasoning**: Adaptive effort based on query complexity
-- **LangGraph Caching**: State persistence across conversation turns
+- **Deterministic Summarization**: Common result shapes are formatted without an LLM call
 - **MongoDB Indexes**: 18+ strategic indexes for common query patterns
 - **Connection Pooling**: Reused connections for high throughput
 - **Async I/O**: Non-blocking request handling with FastAPI
@@ -665,8 +714,9 @@ procurement-agentic-system/
 ├── docker/                         # Container definitions
 │   ├── Dockerfile.api
 │   └── Dockerfile.importer
-├── docs/                           # Documentation
-│   └── SCHEMA.md
+├── TECHNICAL_ARCHITECTURE.md       # Hybrid engine deep dive
+├── LANGGRAPH_EXPLAINED.md          # Both LangGraph state graphs
+├── collection_schemas.json         # Full field inventory
 ├── evaluation/                     # AI evaluation framework
 │   ├── README.md
 │   ├── eval_system.py
@@ -680,14 +730,27 @@ procurement-agentic-system/
 │   │   │   ├── query.py           # Standard query endpoints
 │   │   │   └── health.py          # Health checks
 │   │   └── services/
-│   │       └── mongodb_agent/      # LangGraph agent
-│   │           ├── agent.py        # GPT-5 agent core
-│   │           ├── langgraph_agent.py  # LangGraph orchestration
-│   │           ├── pipeline_generator.py
-│   │           ├── executor.py
-│   │           ├── validators.py
-│   │           ├── summarizer.py
-│   │           └── prompts.py
+│   │       ├── deterministic_engine/   # Hybrid router + rule-based engine
+│   │       │   ├── agent.py             # HybridQueryEngine (outer LangGraph)
+│   │       │   ├── intent_extractor.py  # LLM → typed QueryIntent
+│   │       │   ├── intent_sanitizer.py  # ambiguity coordination
+│   │       │   ├── ambiguity_detector.py# deterministic ambiguity safety net
+│   │       │   ├── query_builder.py     # intent → aggregation pipeline
+│   │       │   ├── field_mappings.py    # enum → MongoDB field paths
+│   │       │   ├── validator.py         # intent + pipeline validation
+│   │       │   ├── executor.py          # pipeline execution
+│   │       │   ├── summarizer.py        # deterministic/LLM answer formatting
+│   │       │   └── models/intent.py     # QueryIntent Pydantic models
+│   │       ├── ai_pipeline_agent/       # GPT-5 fallback agent
+│   │       │   ├── agent.py             # GPT5MongoDBAgent (Responses API)
+│   │       │   ├── langgraph_agent.py   # self-correcting inner LangGraph
+│   │       │   ├── pipeline_generator.py
+│   │       │   ├── executor.py
+│   │       │   ├── validators.py
+│   │       │   ├── summarizer.py
+│   │       │   ├── prompts.py
+│   │       │   └── schema.py
+│   │       └── shared/                  # Mongo serialization + OpenAI helpers
 │   ├── importer/                   # CSV import pipeline
 │   └── validation/                 # Data validation
 ├── src/web/                        # Web interface
@@ -875,15 +938,15 @@ docker-compose restart mongodb
 
 ## 🏆 Key Innovations
 
-1. **GPT-5 Reasoning Optimization**: Adaptive reasoning effort based on query complexity reduces cost while maintaining accuracy
+1. **Hybrid Deterministic + LLM Architecture**: A LangGraph router answers supported queries with fast, reproducible, rule-based code and reserves the GPT-5 agent for the long tail — cutting cost and latency without sacrificing coverage
 
-2. **LangGraph State Machine**: Sophisticated retry logic with error recovery ensures robustness for production use
+2. **Two Cooperating LangGraph Graphs**: An outer routing state machine and an inner self-correcting agent, each with typed state and conditional edges
 
-3. **Hybrid Validation**: Combined syntactic and semantic validation prevents invalid queries while allowing creative solutions
+3. **Structured Intent Compilation**: Questions become a typed `QueryIntent` model that a deterministic builder compiles into validated MongoDB aggregation pipelines — no free-text prompt-to-query guessing on the happy path
 
-4. **Conversation Context**: Maintains state across turns enabling natural follow-up questions and clarifications
+4. **Self-Correction**: The fallback agent dry-runs each pipeline against MongoDB and regenerates from its own error (up to 3 attempts)
 
-5. **Performance Tuning**: Strategic indexing and query optimization deliver sub-second responses for most queries
+5. **Clarify Instead of Guess**: Two-layer ambiguity detection (LLM + deterministic) asks the user a follow-up rather than returning a confidently-wrong answer
 
 ---
 
