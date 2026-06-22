@@ -7,13 +7,27 @@ export const DataVisualizer = {
     /**
      * Analyze data structure and determine best visualization type
      */
-    analyzeData(results, pipeline) {
+    analyzeData(results, pipeline, intent = null) {
         if (!results || results.length === 0) {
             return { type: 'none' };
         }
 
         const firstItem = results[0];
         const keys = Object.keys(firstItem);
+
+        // Extract group_by field name from intent for better column naming
+        const groupByField = intent?.group_by || null;
+
+        if (this._isDocumentLike(firstItem, keys)) {
+            const columns = this._getCompactColumns(results);
+            return {
+                type: 'multi',
+                primary: 'table',
+                alternate: [],
+                columns: columns.length > 0 ? columns : keys,
+                groupByField
+            };
+        }
 
         // Check for aggregated data (has _id and aggregation fields like total, count, avg)
         const hasId = keys.includes('_id');
@@ -39,7 +53,8 @@ export const DataVisualizer = {
                     primary: 'pie',
                     alternate: ['bar', 'table'],
                     label: this._extractLabel(firstItem),
-                    value: this._extractValue(firstItem)
+                    value: this._extractValue(firstItem),
+                    groupByField
                 };
             } else if (hasTimeDimension) {
                 // Line chart for time series
@@ -49,7 +64,8 @@ export const DataVisualizer = {
                     alternate: ['bar', 'table'],
                     label: this._extractLabel(firstItem),
                     value: this._extractValue(firstItem),
-                    isTimeSeries: true
+                    isTimeSeries: true,
+                    groupByField
                 };
             } else {
                 // Bar chart for aggregated data
@@ -58,7 +74,8 @@ export const DataVisualizer = {
                     primary: 'bar',
                     alternate: ['pie', 'table'],
                     label: this._extractLabel(firstItem),
-                    value: this._extractValue(firstItem)
+                    value: this._extractValue(firstItem),
+                    groupByField
                 };
             }
         }
@@ -69,8 +86,60 @@ export const DataVisualizer = {
             type: 'multi',
             primary: 'table',
             alternate: [],  // Table-only, but still uses multi-view container
-            columns: keys
+            columns: keys,
+            groupByField
         };
+    },
+
+    _isDocumentLike(item, keys) {
+        const hasNested = keys.some(key => typeof item[key] === 'object' && item[key] !== null);
+        if (!hasNested) {
+            return false;
+        }
+
+        const hasPurchaseOrder =
+            keys.includes('purchase_order_number') ||
+            keys.includes('requisition_number') ||
+            keys.includes('lpa_number');
+        const hasProcurementSections = ['item', 'department', 'supplier', 'dates', 'acquisition'].some(
+            (key) => keys.includes(key)
+        );
+
+        return (hasPurchaseOrder || hasProcurementSections) && keys.length >= 6;
+    },
+
+    _getCompactColumns(results) {
+        if (!results || results.length === 0) return [];
+
+        const first = results[0];
+        const preferred = [
+            'purchase_order_number',
+            'item.total_price',
+            'department.normalized_name',
+            'supplier.name',
+            'dates.fiscal_year',
+            'dates.creation',
+            'acquisition.type'
+        ];
+
+        const available = preferred.filter((path) => this._getValueByPath(first, path) !== undefined);
+        if (available.length >= 3) {
+            return available;
+        }
+
+        const primitiveKeys = Object.keys(first).filter((key) => {
+            if (key === '_id') return false;
+            const value = first[key];
+            return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+        });
+
+        return primitiveKeys.slice(0, 6);
+    },
+
+    _getValueByPath(obj, path) {
+        if (!obj || !path) return undefined;
+        if (!path.includes('.')) return obj[path];
+        return path.split('.').reduce((acc, key) => (acc ? acc[key] : undefined), obj);
     },
 
     /**
@@ -496,10 +565,11 @@ export const DataVisualizer = {
         const headerRow = document.createElement('tr');
 
         const columns = analysis.columns || Object.keys(results[0]);
+        const groupByField = analysis.groupByField || null;
 
         columns.forEach(col => {
             const th = document.createElement('th');
-            th.textContent = this._inferColumnName(col, results);
+            th.textContent = this._inferColumnName(col, results, groupByField);
             th.style.textAlign = 'left';  // Consistent left alignment for all headers
             headerRow.appendChild(th);
         });
@@ -515,7 +585,7 @@ export const DataVisualizer = {
 
             columns.forEach(col => {
                 const td = document.createElement('td');
-                const value = row[col];
+                const value = this._getValueByPath(row, col);
 
                 if (typeof value === 'number') {
                     td.textContent = this._formatNumber(value);
@@ -567,15 +637,61 @@ export const DataVisualizer = {
     },
 
     /**
-     * Infer a better column name based on the data
+     * Infer a better column name based on the data and intent
      */
-    _inferColumnName(columnName, results) {
+    _inferColumnName(columnName, results, groupByField = null) {
         // If not _id, use default formatting
         if (columnName !== '_id') {
+            const labelMap = {
+                'purchase_order_number': 'PO Number',
+                'item.total_price': 'Total Price',
+                'department.normalized_name': 'Department',
+                'supplier.name': 'Supplier',
+                'dates.fiscal_year': 'Fiscal Year',
+                'dates.creation': 'Creation Date',
+                'acquisition.type': 'Acquisition Type'
+            };
+            if (labelMap[columnName]) {
+                return labelMap[columnName];
+            }
+
+            if (columnName.includes('.')) {
+                return columnName
+                    .split('.')
+                    .map(segment => segment.replace(/_/g, ' '))
+                    .map(segment => segment.replace(/\b\w/g, l => l.toUpperCase()))
+                    .join(' ');
+            }
+
             return columnName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
         }
 
-        // For _id column, try to infer based on the actual data
+        // For _id column, first check if we know the group_by field from intent
+        if (groupByField) {
+            const fieldLabelMap = {
+                'purchase_order_number': 'PO Number',
+                'department': 'Department',
+                'department_name': 'Department',
+                'supplier': 'Supplier',
+                'supplier_code': 'Supplier Code',
+                'fiscal_year': 'Fiscal Year',
+                'fiscal_year_start': 'Fiscal Year',
+                'acquisition_type': 'Acquisition Type',
+                'acquisition_sub_type': 'Acquisition Sub-Type',
+                'acquisition_method': 'Acquisition Method',
+                'item_name': 'Item Name',
+                'classification': 'Classification',
+                'classification_family': 'Classification Family',
+                'cal_card': 'Cal Card'
+            };
+            if (fieldLabelMap[groupByField]) {
+                return fieldLabelMap[groupByField];
+            }
+            // Fallback: format the field name nicely
+            return groupByField.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
+
+        // Fallback: try to infer based on the actual data values
         if (results && results.length > 0) {
             const sampleValue = results[0][columnName];
             const strValue = String(sampleValue);
@@ -588,7 +704,6 @@ export const DataVisualizer = {
                 return 'Fiscal Year';
             }
             if (/^\d{4}$/.test(strValue)) {
-                // Could be year, fiscal year, or just a number - check if it looks like a year
                 const year = parseInt(strValue);
                 if (year >= 1900 && year <= 2100) {
                     return 'Year';
@@ -610,9 +725,9 @@ export const DataVisualizer = {
                 return 'Quarter';
             }
 
-            // Check if all values look like department/category names (longer strings)
-            if (strValue.length > 15 && /[a-z]/i.test(strValue)) {
-                return 'Category';
+            // Check for PO number patterns (e.g., "04-36069", "11-88134", "HSR13-57")
+            if (/^\d{2}-\d{4,6}$/.test(strValue) || /^[A-Z]{2,4}\d{2}-\d+$/.test(strValue)) {
+                return 'PO Number';
             }
 
             // Check if it looks like a name or title
@@ -622,7 +737,7 @@ export const DataVisualizer = {
         }
 
         // Default fallback for _id
-        return 'Category';
+        return 'ID';
     },
 
     /**

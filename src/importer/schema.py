@@ -110,7 +110,10 @@ class PurchaseOrderSchema:
                 "data_quality": {
                     "has_location": row.get("supplier_location") is not None,
                     "has_purchase_date": row.get("purchase_date") is not None,
-                    "has_unspsc": row.get("normalized_unspsc") is not None and row.get("normalized_unspsc") != ""
+                    "has_unspsc": (
+                        (row.get("normalized_unspsc") is not None and row.get("normalized_unspsc") != "") or
+                        (row.get("classification_codes") and len(row.get("classification_codes", [])) > 0)
+                    )
                 }
             }
         }

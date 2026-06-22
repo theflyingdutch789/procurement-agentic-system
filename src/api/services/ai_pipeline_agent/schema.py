@@ -37,7 +37,8 @@ class MongoDBSchemaContext:
     - acquisition.sub_method (string): More specific contracting approach when provided
 
     **Item:**
-    - item.description (string): Full-text item description
+    - item.name (string): Short item/product name
+    - item.description (string): Full-text detailed item description
     - item.quantity (number): Quantity ordered
     - item.unit_price (number): Price per unit (USD)
     - item.total_price (number): Total line item price (can be negative for credits/returns)

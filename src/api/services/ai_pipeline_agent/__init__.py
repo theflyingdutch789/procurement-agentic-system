@@ -1,8 +1,8 @@
 """
-MongoDB agent service package.
+AI pipeline agent package.
 
-Provides modular components for schema context, validation, execution, and
-agent orchestration used by the GPT-powered procurement assistant.
+Provides GPT-powered pipeline generation, validation, execution, and summarization
+for natural language queries over procurement data.
 """
 
 from .schema import MongoDBSchemaContext

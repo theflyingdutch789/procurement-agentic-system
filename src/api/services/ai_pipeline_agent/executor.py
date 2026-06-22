@@ -3,11 +3,10 @@ Execution helpers for MongoDB aggregation pipelines.
 """
 
 import logging
-import math
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from bson import ObjectId
+from ..shared.mongo_serialization import serialize_mongo_results
 from pymongo.errors import PyMongoError
 
 
@@ -46,7 +45,7 @@ class MongoDBQueryExecutor:
                 len(results),
             )
 
-            return True, self._serialize_results(results)
+            return True, serialize_mongo_results(results)
 
         except PyMongoError as exc:
             error_msg = f"Query execution failed: {exc}"
@@ -56,25 +55,3 @@ class MongoDBQueryExecutor:
             error_msg = f"Unexpected error during execution: {exc}"
             self.logger.error(error_msg, exc_info=True)
             return False, error_msg
-
-    def _serialize_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Serialize MongoDB results to JSON-compatible format."""
-
-        def serialize(value: Any) -> Any:
-            if isinstance(value, ObjectId):
-                return str(value)
-            if isinstance(value, datetime):
-                return value.isoformat()
-            if isinstance(value, float):
-                if math.isnan(value):
-                    return None
-                if math.isinf(value):
-                    return "Infinity" if value > 0 else "-Infinity"
-                return value
-            if isinstance(value, dict):
-                return {k: serialize(v) for k, v in value.items()}
-            if isinstance(value, list):
-                return [serialize(item) for item in value]
-            return value
-
-        return [serialize(doc) for doc in results]

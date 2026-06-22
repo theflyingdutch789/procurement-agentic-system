@@ -105,6 +105,15 @@ This project delivers a **100% production-ready AI-powered procurement assistant
 "List all purchases over $100,000 from San Francisco suppliers"
 ```
 
+**Deterministic-First Examples**
+```
+"Compare spending by department and fiscal year"
+"Trend total spending by fiscal year"
+"Top 5 suppliers by average unit price in 2014"
+"List purchases between 2014-01-01 and 2014-12-31"
+"Count orders by acquisition method"
+```
+
 ### 🏗️ Technical Excellence
 
 **Backend (FastAPI + MongoDB)**
@@ -140,6 +149,9 @@ This project delivers a **100% production-ready AI-powered procurement assistant
 ## 🏗️ Architecture
 
 ### System Design
+
+LangGraph is used in two places: a thin hybrid router that decides deterministic vs. fallback,
+and the agentic fallback workflow (retries + summarization).
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐

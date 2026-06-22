@@ -91,6 +91,11 @@ db[collectionName].createIndex(
 );
 
 db[collectionName].createIndex(
+  { 'item.total_price': -1 },
+  { name: 'idx_total_price_desc', background: true }
+);
+
+db[collectionName].createIndex(
   { 'cal_card': 1 },
   { name: 'idx_cal_card', background: true }
 );

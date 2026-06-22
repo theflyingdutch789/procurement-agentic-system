@@ -11,6 +11,7 @@ import requests
 
 chat_bp = Blueprint('chat', __name__, url_prefix='/api/chat')
 DEFAULT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "10"))
+API_REQUEST_TIMEOUT = int(os.getenv("API_REQUEST_TIMEOUT", "180"))
 
 
 def init_chat_routes(db):
@@ -318,6 +319,7 @@ def init_chat_routes(db):
             conversation_id = data.get('conversation_id')
             question = data['question']
             reasoning_effort = data.get('reasoning_effort', 'medium')
+            is_clarification_response = data.get('is_clarification_response', False)
 
             # Create new conversation if not provided
             if not conversation_id:
@@ -364,9 +366,10 @@ def init_chat_routes(db):
                         "conversation_history": conversation_history,  # Pass conversation history for follow-up context
                         "reasoning_effort": effective_reasoning,
                         "model": model,
-                        "max_results": DEFAULT_MAX_RESULTS
+                        "max_results": DEFAULT_MAX_RESULTS,
+                        "is_clarification_response": is_clarification_response
                     },
-                    timeout=60
+                    timeout=API_REQUEST_TIMEOUT
                 )
 
                 if api_response.status_code != 200:

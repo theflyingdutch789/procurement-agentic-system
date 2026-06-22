@@ -1,0 +1,256 @@
+{
+  "database": "government_procurement",
+  "collections": [
+    {
+      "name": "purchase_orders",
+      "description": "California state government purchase order line items (2012-2015)",
+      "document_type": "purchase_order_line_item",
+      "fields": [
+        {
+          "path": "purchase_order_number",
+          "type": "string",
+          "description": "Purchase order identifier",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "requisition_number",
+          "type": "string",
+          "description": "Requisition identifier",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "lpa_number",
+          "type": "string",
+          "description": "Leveraged Procurement Agreement number",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "dates.creation",
+          "type": "date",
+          "description": "PO creation date",
+          "query": ["filter", "group", "sort"]
+        },
+        {
+          "path": "dates.purchase",
+          "type": "date",
+          "description": "Purchase date",
+          "query": ["filter", "group", "sort"]
+        },
+        {
+          "path": "dates.fiscal_year",
+          "type": "string",
+          "description": "Fiscal year label (e.g., 2013-2014)",
+          "query": ["filter", "group", "sort"]
+        },
+        {
+          "path": "dates.fiscal_year_start",
+          "type": "number",
+          "description": "Fiscal year start (e.g., 2013)",
+          "query": ["filter", "group", "sort"]
+        },
+        {
+          "path": "acquisition.type",
+          "type": "string",
+          "description": "Acquisition category",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "acquisition.sub_type",
+          "type": "string",
+          "description": "Acquisition sub-type",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "acquisition.method",
+          "type": "string",
+          "description": "Acquisition method",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "acquisition.sub_method",
+          "type": "string",
+          "description": "Acquisition sub-method",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "department.name",
+          "type": "string",
+          "description": "Department name (raw)",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "department.normalized_name",
+          "type": "string",
+          "description": "Department name (normalized)",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "supplier.code",
+          "type": "string",
+          "description": "Supplier identifier",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "supplier.name",
+          "type": "string",
+          "description": "Supplier name",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "supplier.qualifications",
+          "type": "array[string]",
+          "description": "Supplier qualifications (e.g., Small Business)",
+          "query": ["filter", "select"]
+        },
+        {
+          "path": "supplier.zip_code",
+          "type": "string",
+          "description": "Supplier ZIP code",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "supplier.location",
+          "type": "geojson",
+          "description": "Supplier GeoJSON point",
+          "query": ["filter"]
+        },
+        {
+          "path": "item.name",
+          "type": "string",
+          "description": "Item name",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "item.description",
+          "type": "string",
+          "description": "Item description",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "item.quantity",
+          "type": "number",
+          "description": "Item quantity",
+          "query": ["filter", "group", "sort", "select", "metric"]
+        },
+        {
+          "path": "item.unit_price",
+          "type": "number",
+          "description": "Item unit price",
+          "query": ["filter", "group", "sort", "select", "metric"]
+        },
+        {
+          "path": "item.total_price",
+          "type": "number",
+          "description": "Item total price",
+          "query": ["filter", "group", "sort", "select", "metric"]
+        },
+        {
+          "path": "cal_card",
+          "type": "boolean",
+          "description": "CalCard usage flag",
+          "query": ["filter", "group", "select"]
+        },
+        {
+          "path": "classification.codes",
+          "type": "array[string]",
+          "description": "Classification codes",
+          "query": ["filter", "select"]
+        },
+        {
+          "path": "classification.unspsc.segment.title",
+          "type": "string",
+          "description": "UNSPSC segment title",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "classification.unspsc.family.title",
+          "type": "string",
+          "description": "UNSPSC family title",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "classification.unspsc.class.title",
+          "type": "string",
+          "description": "UNSPSC class title",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "classification.unspsc.commodity.title",
+          "type": "string",
+          "description": "UNSPSC commodity title",
+          "query": ["filter", "group", "sort", "select"]
+        },
+        {
+          "path": "metadata.import_date",
+          "type": "date",
+          "description": "Import timestamp",
+          "query": ["filter", "sort"]
+        },
+        {
+          "path": "metadata.source_file",
+          "type": "string",
+          "description": "Source filename",
+          "query": ["filter"]
+        },
+        {
+          "path": "metadata.data_quality.has_location",
+          "type": "boolean",
+          "description": "Location present flag",
+          "query": ["filter"]
+        },
+        {
+          "path": "metadata.data_quality.has_purchase_date",
+          "type": "boolean",
+          "description": "Purchase date present flag",
+          "query": ["filter"]
+        },
+        {
+          "path": "metadata.data_quality.has_unspsc",
+          "type": "boolean",
+          "description": "UNSPSC present flag",
+          "query": ["filter"]
+        }
+      ],
+      "metrics": [
+        {
+          "name": "spending",
+          "path": "item.total_price",
+          "type": "number",
+          "notes": "Use $ifNull when summing"
+        },
+        {
+          "name": "quantity",
+          "path": "item.quantity",
+          "type": "number",
+          "notes": "Use for totals or averages"
+        },
+        {
+          "name": "unit_price",
+          "path": "item.unit_price",
+          "type": "number",
+          "notes": "Use for averages, min/max"
+        },
+        {
+          "name": "order_count",
+          "path": "__COUNT__",
+          "type": "number",
+          "notes": "Count of records"
+        }
+      ],
+      "enums": {
+        "acquisition.type": [
+          "IT Goods",
+          "IT Services",
+          "NON-IT Goods",
+          "NON-IT Services"
+        ]
+      },
+      "query_hints": [
+        "Use dates.creation for time-series queries",
+        "Use dates.fiscal_year_start for numeric year comparisons",
+        "item.total_price can be null or negative; use $ifNull for sums",
+        "supplier.location is GeoJSON; use $geoNear/$geoWithin for spatial"
+      ]
+    }
+  ]
+}

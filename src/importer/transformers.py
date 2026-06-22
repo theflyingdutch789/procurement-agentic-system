@@ -348,17 +348,33 @@ class DataTransformer:
             return None
 
     @staticmethod
-    def clean_string(value: str) -> Optional[str]:
+    def clean_string(value: Any) -> Optional[str]:
         """
         Clean and normalize string values.
 
+        Handles both string and numeric inputs - numeric values are converted
+        to strings (with .0 suffix removed for whole numbers).
+
         Args:
-            value: Raw string value
+            value: Raw value (string, int, float, or other)
 
         Returns:
             Cleaned string or None
         """
-        if not value or not isinstance(value, str):
+        # Handle None/NaN first
+        value = DataTransformer.safe_convert_value(value)
+        if value is None:
+            return None
+
+        # Convert numeric values to string
+        if isinstance(value, (int, float)):
+            # For floats that are whole numbers, remove the .0 suffix
+            if isinstance(value, float) and value.is_integer():
+                value = str(int(value))
+            else:
+                value = str(value)
+
+        if not isinstance(value, str):
             return None
 
         cleaned = value.strip()

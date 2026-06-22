@@ -9,7 +9,52 @@ import { handleLogout } from './auth.js';
 let currentConversation = null;
 let conversations = [];
 let isLoading = false;
+let isCreatingConversation = false;
 const DEFAULT_MAX_RESULTS = 10;
+
+// Format MongoDB pipeline in a compact, readable way
+function formatPipelineCompact(pipeline) {
+    const formatValue = (val, depth = 0) => {
+        const indent = '  '.repeat(depth);
+        const childIndent = '  '.repeat(depth + 1);
+
+        if (val === null) return 'null';
+        if (typeof val === 'string') return `"${val}"`;
+        if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+
+        if (Array.isArray(val)) {
+            if (val.length === 0) return '[]';
+            // Short arrays of primitives on one line
+            if (val.length <= 3 && val.every(v => typeof v !== 'object' || v === null)) {
+                return '[' + val.map(v => formatValue(v, 0)).join(', ') + ']';
+            }
+            const items = val.map(v => childIndent + formatValue(v, depth + 1));
+            return '[\n' + items.join(',\n') + '\n' + indent + ']';
+        }
+
+        if (typeof val === 'object') {
+            const keys = Object.keys(val);
+            if (keys.length === 0) return '{}';
+            // Single key-value with primitive on one line
+            if (keys.length === 1 && typeof val[keys[0]] !== 'object') {
+                return `{ "${keys[0]}": ${formatValue(val[keys[0]], 0)} }`;
+            }
+            const pairs = keys.map(k => `${childIndent}"${k}": ${formatValue(val[k], depth + 1)}`);
+            return '{\n' + pairs.join(',\n') + '\n' + indent + '}';
+        }
+
+        return String(val);
+    };
+
+    // Format each stage
+    const stages = pipeline.map((stage, i) => {
+        const stageKey = Object.keys(stage)[0];
+        const stageValue = stage[stageKey];
+        return `{ "${stageKey}": ${formatValue(stageValue, 1)} }`;
+    });
+
+    return '[\n  ' + stages.join(',\n  ') + '\n]';
+}
 
 // Toggle sidebar (mobile)
 function toggleSidebar() {
@@ -45,16 +90,29 @@ function restoreSidebarState() {
 
 // Create new conversation
 async function createNewConversation() {
+    // Guard against multiple rapid clicks
+    if (isCreatingConversation) {
+        console.log('[createNewConversation] Already in progress, ignoring...');
+        return;
+    }
+
+    isCreatingConversation = true;
     console.log('[createNewConversation] Starting...');
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
         const response = await fetch(`${API_BASE}/chat/conversations`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             credentials: 'include',
+            signal: controller.signal,
             body: JSON.stringify({})  // Send empty JSON object
         });
+
+        clearTimeout(timeoutId);
 
         console.log('[createNewConversation] Response status:', response.status);
 
@@ -90,23 +148,31 @@ async function createNewConversation() {
     } catch (error) {
         console.error('[createNewConversation] Exception:', error);
         showToast('Failed to create new conversation. Please try again.');
+    } finally {
+        isCreatingConversation = false;
     }
 }
 
 // Load conversations list
 async function loadConversations() {
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
         const response = await fetch(`${API_BASE}/chat/conversations?limit=50`, {
-            credentials: 'include'
+            credentials: 'include',
+            signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         const data = await response.json();
         if (data.success) {
             conversations = data.conversations;
             renderConversationsList();
 
-            // Update stats
-            await loadUserStats();
+            // Update stats in background (don't block UI)
+            loadUserStats();
         }
     } catch (error) {
         console.error('Load conversations error:', error);
@@ -153,9 +219,15 @@ function renderConversationsList() {
 // Load a specific conversation
 async function loadConversation(conversationId) {
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
         const response = await fetch(`${API_BASE}/chat/conversations/${conversationId}`, {
-            credentials: 'include'
+            credentials: 'include',
+            signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         const data = await response.json();
         if (data.success) {
@@ -267,8 +339,71 @@ function createMessageElement(role, content, timestamp) {
     return messageDiv;
 }
 
+// Initialize clarification handlers in a message element
+function initializeClarificationHandlers(messageElement) {
+    const submitBtns = messageElement.querySelectorAll('.clarification-submit-btn');
+
+    submitBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const clarificationId = btn.dataset.clarificationId;
+            handleClarificationSubmit(clarificationId, messageElement);
+        });
+    });
+
+    // Also handle Enter key in custom input
+    const customInputs = messageElement.querySelectorAll('.clarification-custom-input');
+    customInputs.forEach(input => {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const clarificationId = input.dataset.clarificationId;
+                handleClarificationSubmit(clarificationId, messageElement);
+            }
+        });
+    });
+}
+
+// Handle clarification form submission
+function handleClarificationSubmit(clarificationId, messageElement) {
+    const card = messageElement.querySelector(`[data-clarification-id="${clarificationId}"]`);
+    if (!card) return;
+
+    // Get selected option
+    const selectedRadio = card.querySelector(`input[name="${clarificationId}"]:checked`);
+    const customInput = card.querySelector('.clarification-custom-input');
+    const customText = customInput ? customInput.value.trim() : '';
+
+    if (!selectedRadio && !customText) {
+        showToast('Please select an option or provide custom instructions', 'warning');
+        return;
+    }
+
+    // Build the clarified query
+    let clarifiedQuery = '';
+    if (selectedRadio) {
+        clarifiedQuery = selectedRadio.value;
+    }
+    if (customText) {
+        clarifiedQuery = clarifiedQuery ? `${clarifiedQuery}. ${customText}` : customText;
+    }
+
+    // Disable the form
+    const submitBtn = card.querySelector('.clarification-submit-btn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+    }
+
+    // Send clarification response directly (skip ambiguity detection)
+    sendMessage(clarifiedQuery, { isClarificationResponse: true });
+}
+
 // Initialize visualizations in a message element
 function initializeVisualizations(messageElement) {
+    // Also initialize clarification handlers
+    initializeClarificationHandlers(messageElement);
+
     if (!DataVisualizer) {
         console.warn('[Chat] DataVisualizer not available');
         return;
@@ -318,6 +453,47 @@ function initializeVisualizations(messageElement) {
 // Create assistant message HTML from response
 function createAssistantMessage(response) {
     let html = '';
+    const isClarification =
+        response.needs_clarification === true ||
+        response.error === 'Ambiguous query' ||
+        !!response.clarification_prompt;
+
+    if (isClarification) {
+        const promptText = response.clarification_prompt || response.answer || 'I need clarification to proceed.';
+        const promptHtml = formatTextWithLineBreaks(promptText);
+        const clarificationId = `clarification-${Date.now()}`;
+
+        html += `<div class="clarification-card" data-clarification-id="${clarificationId}">
+            <div class="clarification-title">Need Clarification</div>
+            <div class="clarification-text">${promptHtml}</div>`;
+
+        if (Array.isArray(response.suggestions) && response.suggestions.length > 0) {
+            html += `<div class="clarification-options">`;
+            response.suggestions.forEach((item, index) => {
+                const optionId = `${clarificationId}-option-${index}`;
+                html += `
+                    <label class="clarification-option" for="${optionId}">
+                        <input type="radio" id="${optionId}" name="${clarificationId}" value="${escapeHtml(item)}">
+                        <span class="clarification-option-text">${escapeHtml(item)}</span>
+                    </label>`;
+            });
+            html += `</div>`;
+        }
+
+        // Custom instruction field
+        html += `
+            <div class="clarification-custom">
+                <label class="clarification-custom-label">Additional instructions (optional):</label>
+                <input type="text" class="clarification-custom-input"
+                       placeholder="e.g., only for fiscal year 2014, limit to IT department..."
+                       data-clarification-id="${clarificationId}">
+            </div>
+            <button class="clarification-submit-btn" data-clarification-id="${clarificationId}">
+                Submit Selection
+            </button>
+        </div>`;
+        return html;
+    }
 
     // Add answer if present
     if (response.answer) {
@@ -327,7 +503,7 @@ function createAssistantMessage(response) {
     // Add visualization if data is available (only for multiple results)
     if (response.results && response.results.length > 1 && DataVisualizer) {
         const vizId = `viz-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const analysis = DataVisualizer.analyzeData(response.results, response.pipeline);
+        const analysis = DataVisualizer.analyzeData(response.results, response.pipeline, response.intent);
 
         if (analysis.type !== 'none') {
             // Properly escape JSON for HTML attributes
@@ -359,11 +535,12 @@ function createAssistantMessage(response) {
 
     // Add pipeline if present (collapsible)
     if (response.pipeline && response.pipeline.length > 0) {
+        const formattedPipeline = formatPipelineCompact(response.pipeline);
         html += `<details style="margin-top: 0.5rem;">
             <summary style="cursor: pointer; font-size: 0.875rem; color: var(--gray-600);">
                 View MongoDB Pipeline
             </summary>
-            <pre>${JSON.stringify(response.pipeline, null, 2)}</pre>
+            <pre style="font-size: 0.8rem; line-height: 1.3;">${escapeHtml(formattedPipeline)}</pre>
         </details>`;
     }
 
@@ -528,15 +705,11 @@ async function deleteConversation(conversationId) {
 }
 
 
-// Send message
-async function handleSendMessage(event) {
-    event.preventDefault();
+// Send message with options
+async function sendMessage(question, options = {}) {
+    const { isClarificationResponse = false } = options;
 
     if (isLoading) return false;
-
-    const input = document.getElementById('message-input');
-    const question = input.value.trim();
-
     if (!question) return false;
 
     const mode = document.getElementById('mode-select').value;
@@ -564,6 +737,7 @@ async function handleSendMessage(event) {
     }
 
     // Clear input
+    const input = document.getElementById('message-input');
     input.value = '';
     autoResizeTextarea(input);
 
@@ -604,7 +778,8 @@ async function handleSendMessage(event) {
                 question: question,
                 reasoning_effort: reasoningEffort,
                 model,
-                max_results: DEFAULT_MAX_RESULTS
+                max_results: DEFAULT_MAX_RESULTS,
+                is_clarification_response: isClarificationResponse
             })
         });
 
@@ -659,6 +834,16 @@ async function handleSendMessage(event) {
     return false;
 }
 
+// Send message (form handler)
+async function handleSendMessage(event) {
+    event.preventDefault();
+
+    const input = document.getElementById('message-input');
+    const question = input.value.trim();
+
+    return sendMessage(question);
+}
+
 // Create loading message
 function createLoadingMessage() {
     const loadingDiv = document.createElement('div');
@@ -701,9 +886,15 @@ function updateConversationTitle(title) {
 // Load user stats
 async function loadUserStats() {
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout (non-critical)
+
         const response = await fetch(`${API_BASE}/chat/stats`, {
-            credentials: 'include'
+            credentials: 'include',
+            signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         const data = await response.json();
         if (data.success) {
@@ -780,6 +971,11 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function formatTextWithLineBreaks(text) {
+    if (!text) return '';
+    return escapeHtml(text).replace(/\n/g, '<br>');
 }
 
 // Show toast notification

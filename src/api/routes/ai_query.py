@@ -6,14 +6,14 @@ Natural language to MongoDB query conversion using GPT-5 Responses API.
 
 import os
 import logging
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Body
 from pydantic import BaseModel, Field
 
 from src.api.dependencies import get_mongo_client, get_database
-from src.api.services.mongodb_agent import GPT5MongoDBAgent, LangGraphMongoDBAgent
+from src.api.services import HybridQueryEngine
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +60,19 @@ class NaturalLanguageQueryRequest(BaseModel):
         description="GPT-5 model: 'gpt-5' (best), 'gpt-5-mini' (balanced), 'gpt-5-nano' (fast)",
         examples=["gpt-5", "gpt-5-mini", "gpt-5-nano"]
     )
+    is_clarification_response: bool = Field(
+        default=False,
+        description="Set to true when user is responding to a clarification prompt (skips ambiguity detection)"
+    )
 
 
 class AIQueryResponse(BaseModel):
     """Response model for AI queries."""
     success: bool
     answer: Optional[str] = None
+    needs_clarification: Optional[bool] = None
+    clarification_prompt: Optional[str] = None
+    suggestions: Optional[List[str]] = None
     pipeline: Optional[list] = None
     results: Optional[list] = None
     result_count: Optional[int] = None
@@ -76,7 +83,7 @@ class AIQueryResponse(BaseModel):
 
 
 # Global agent instance (initialized on first request)
-_agent_instance: Optional[LangGraphMongoDBAgent] = None
+_agent_instance: Optional[HybridQueryEngine] = None
 
 # Per-conversation state tracking (previous_response_id for chain-of-thought)
 # Format: {conversation_id: previous_response_id}
@@ -86,7 +93,7 @@ _conversation_states: dict[str, Optional[str]] = {}
 def get_agent(
     mongo_client=Depends(get_mongo_client),
     database=Depends(get_database)
-) -> GPT5MongoDBAgent:
+) -> HybridQueryEngine:
     """
     Get or create the GPT-5 MongoDB Agent instance.
 
@@ -104,19 +111,18 @@ def get_agent(
                 detail="OPENAI_API_KEY environment variable not set. Get your API key from: https://platform.openai.com/api-keys"
             )
 
-        logger.info("Initializing GPT-5 MongoDB AI Agent (LangGraph orchestrated)...")
-        base_agent = GPT5MongoDBAgent(
+        logger.info("Initializing Hybrid Query Engine (deterministic + GPT fallback)...")
+        _agent_instance = HybridQueryEngine(
             mongo_client=mongo_client,
             database_name=database.name,
             collection_name="purchase_orders",
             openai_api_key=openai_api_key,
-            model_name="gpt-5",  # Default to GPT-5
-            reasoning_effort="medium",  # Balanced default
+            model_name="gpt-5",
+            reasoning_effort="medium",
             verbosity="medium",
-            max_results=10
+            max_results=10,
         )
-        _agent_instance = LangGraphMongoDBAgent(base_agent)
-        logger.info("LangGraph GPT-5 MongoDB AI Agent initialized successfully")
+        logger.info("Hybrid Query Engine initialized successfully")
 
     return _agent_instance
 
@@ -181,7 +187,7 @@ def clear_conversation_state(conversation_id: str):
 )
 async def natural_language_query(
     request: NaturalLanguageQueryRequest = Body(...),
-    agent: LangGraphMongoDBAgent = Depends(get_agent)
+    agent: HybridQueryEngine = Depends(get_agent)
 ) -> AIQueryResponse:
     """
     Process a natural language query using GPT-5.
@@ -212,7 +218,8 @@ async def natural_language_query(
             reasoning_effort=request.reasoning_effort,
             verbosity=request.verbosity,
             previous_response_id=prev_response_id,
-            conversation_history=request.conversation_history
+            conversation_history=request.conversation_history,
+            is_clarification_response=request.is_clarification_response
         )
 
         # Store new response_id for conversation continuity
@@ -226,6 +233,9 @@ async def natural_language_query(
         response = AIQueryResponse(
             success=result["success"],
             answer=result.get("answer"),
+            needs_clarification=result.get("needs_clarification"),
+            clarification_prompt=result.get("clarification_prompt"),
+            suggestions=result.get("suggestions"),
             pipeline=result.get("pipeline"),
             results=result.get("results"),
             result_count=result.get("result_count"),
@@ -245,6 +255,9 @@ async def natural_language_query(
         return AIQueryResponse(
             success=False,
             answer=None,
+            needs_clarification=None,
+            clarification_prompt=None,
+            suggestions=None,
             pipeline=None,
             results=None,
             result_count=None,
@@ -267,7 +280,7 @@ async def get_schema():
     This schema is used by GPT-5 to understand the database structure
     and generate appropriate queries.
     """
-    from src.api.services.mongodb_agent import MongoDBSchemaContext
+    from src.api.services.ai_pipeline_agent import MongoDBSchemaContext
 
     return {
         "collection": "purchase_orders",
@@ -338,19 +351,19 @@ async def get_example_queries():
     summary="Agent Health Check",
     description="Check if the GPT-5 agent is initialized and ready"
 )
-async def agent_health_check(agent: GPT5MongoDBAgent = Depends(get_agent)):
+async def agent_health_check(agent: HybridQueryEngine = Depends(get_agent)):
     """
     Check the health of the GPT-5 agent.
     """
     try:
         # Test database connection
-        agent.collection.database.client.admin.command('ping')
+        agent.deterministic_engine.collection.database.client.admin.command('ping')
 
         return {
             "status": "healthy",
             "agent_initialized": True,
             "database_connected": True,
-            "collection": agent.collection_name,
+            "collection": agent.deterministic_engine.collection.name,
             "model": agent.model_name,
             "reasoning_effort": agent.reasoning_effort,
             "verbosity": agent.verbosity,
@@ -372,7 +385,7 @@ async def agent_health_check(agent: GPT5MongoDBAgent = Depends(get_agent)):
     summary="Reset Conversation State",
     description="Reset the agent's conversation state (clears chain-of-thought history)"
 )
-async def reset_conversation(agent: GPT5MongoDBAgent = Depends(get_agent)):
+async def reset_conversation(agent: HybridQueryEngine = Depends(get_agent)):
     """
     Reset the agent's conversation state.
 

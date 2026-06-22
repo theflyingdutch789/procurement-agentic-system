@@ -27,16 +27,17 @@ RULES:
 9. Use department.normalized_name for department queries
 10. For "top N", use $sort and $limit
 11. Acquisition categories use acquisition.type with values "IT Goods", "IT Services", "NON-IT Goods", "NON-IT Services"
-12. CRITICAL: Each document IS a purchase order (line item). Do NOT group by purchase_order_number unless user says "grouped by PO", "distinct POs", or "combined purchase orders". Questions like "top 5 purchase orders by price" mean top 5 DOCUMENTS sorted by item.total_price
-13. For total record counts, use $count directly (no $group) unless the question explicitly asks for distinct values
-14. When calculating aggregates (averages, percentages), include supporting fields such as group counts and the numerator/denominator values
-15. CRITICAL DATA TYPES:
+12. For item queries: use item.name when user says "item name" or "product name"; use item.description when user says "item description", "description contains", or needs full-text search
+13. CRITICAL: Each document IS a purchase order (line item). Do NOT group by purchase_order_number unless user says "grouped by PO", "distinct POs", or "combined purchase orders". Questions like "top 5 purchase orders by price" mean top 5 DOCUMENTS sorted by item.total_price
+14. For total record counts, use $count directly (no $group) unless the question explicitly asks for distinct values
+15. When calculating aggregates (averages, percentages), include supporting fields such as group counts and the numerator/denominator values
+16. CRITICAL DATA TYPES:
     - dates.fiscal_year is STRING (e.g., "2012-2013")
     - dates.fiscal_year_start is INTEGER (e.g., 2012, 2013, 2014, 2015)
     - item.total_price, item.unit_price, item.quantity are NUMBERS (not strings)
     - dates.creation, dates.purchase are ISODate objects
-16. When user asks for "fiscal year 2014", they mean "2013-2014" (the fiscal year starting in 2013)
-17. If conditional logic (e.g., $cond) is needed inside a $group, nest it inside the accumulator (such as $sum with a $cond expression) rather than using $cond as the accumulator name
+17. When user asks for "fiscal year 2014", they mean "2013-2014" (the fiscal year starting in 2013)
+18. If conditional logic (e.g., $cond) is needed inside a $group, nest it inside the accumulator (such as $sum with a $cond expression) rather than using $cond as the accumulator name
 
 EXAMPLES:
 Question: "Show me spending by fiscal year"

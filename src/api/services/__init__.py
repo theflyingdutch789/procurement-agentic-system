@@ -1,16 +1,17 @@
 """
 API Services
 
-Business logic and AI agent services.
+Deterministic query engine + AI pipeline agent services.
 """
 
-from .mongodb_agent import (
+from .ai_pipeline_agent import (
     GPT5MongoDBAgent,
     LangGraphMongoDBAgent,
     MongoDBSchemaContext,
     QueryValidator,
     MongoDBQueryExecutor,
 )
+from .deterministic_engine import HybridQueryEngine, QueryEngine
 
 __all__ = [
     "GPT5MongoDBAgent",
@@ -18,6 +19,8 @@ __all__ = [
     "MongoDBSchemaContext",
     "QueryValidator",
     "MongoDBQueryExecutor",
+    "QueryEngine",
+    "HybridQueryEngine",
 ]
 
 # Backwards compatibility alias
